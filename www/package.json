@@ -1,0 +1,10 @@
+{
+  "name": "ncdu_ui_diff_www",
+  "version": "1.0.0",
+  "main": "index.html",
+  "author": "3bl3gamer",
+  "license": "MIT",
+  "devDependencies": {
+    "prettier": "^2.0.5"
+  }
+}

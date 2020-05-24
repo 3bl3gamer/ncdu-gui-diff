@@ -1,0 +1,19 @@
+tr.node.created {
+	background-color: green;
+}
+tr.node.removed {
+	background-color: red;
+}
+
+tr.collapsable .name {
+	position: relative;
+}
+tr.collapsable .name::before {
+	content: 'v';
+	position: absolute;
+	left: 0;
+	transform: translateX(-8px);
+}
+tr.collapsable.collapsed .name::before {
+	content: '>';
+}
