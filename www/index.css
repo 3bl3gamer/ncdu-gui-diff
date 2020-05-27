@@ -1,26 +1,42 @@
-tr.node.created {
-	background-color: green;
+.inc {
+	color: green;
 }
-tr.node.removed {
-	background-color: red;
+.dec {
+	color: red;
 }
 
-tr.collapsable .name {
+table {
+	border-collapse: collapse;
+}
+tr {
+	border-bottom: 1px solid lightgray;
+}
+td {
+	padding: 2px 12px;
+}
+
+tr.collapsable td.name {
 	position: relative;
 }
-tr.collapsable .name::before {
+tr.collapsable td.name::before {
 	content: 'v';
 	position: absolute;
 	left: 0;
 	transform: translateX(-8px);
 }
-tr.collapsable.collapsed .name::before {
+tr.collapsable.collapsed td.name::before {
 	content: '>';
 }
 
-.inc {
-	color: green;
+tr.node.created {
+	background-color: rgb(195, 255, 195);
 }
-.dec {
-	color: green;
+tr.node.removed {
+	background-color: rgb(255, 175, 175);
+}
+
+td.asize,
+td.dsize,
+td.files {
+	text-align: right;
 }

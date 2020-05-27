@@ -1,15 +1,13 @@
 /** @typedef {{name:string}} NcduEntry */
 /** @typedef {{children:number}} Aggregation */
 
-/**
- * @param {number|null|undefined} a
- * @param {number|null|undefined} b
- */
-function numDiff(a, b) {
-	if (a === null || a === undefined) return '' + b
-	if (b === null || b === undefined) return '' + a
-	if (a === b) return '' + a
-	return `${b} (<span class="${b > a ? 'inc' : 'dec'}">${b - a}</span>)`
+function toString(a) {
+	return '' + a
+}
+
+/** @param {number} n */
+function sign(n) {
+	return n > 0 ? '+' : n < 0 ? '-' : ''
 }
 
 /**
@@ -20,6 +18,56 @@ function numDiff(a, b) {
 function mustBeNotNull(val) {
 	if (val === null) throw new Error('value is null, this should not happen')
 	return val
+}
+
+/**
+ * @param {number|null|undefined} a
+ * @param {number|null|undefined} b
+ * @param {((val:number, delta?:number) => string)|undefined} [formatFunc]
+ */
+function numDiff(a, b, formatFunc) {
+	formatFunc = formatFunc || formatSimple
+	if (a === null || a === undefined) return formatFunc(/** @type {number} */ (b))
+	if (b === null || b === undefined) return formatFunc(a)
+	if (a === b) return formatFunc(a)
+	return formatFunc(b, b - a)
+}
+
+/**
+ * @param {{}?} a
+ * @param {{}?} b
+ * @param {string} attr
+ * @param {((val:number, delta?:number) => string)|undefined} [formatFunc]
+ */
+function numDiffAttr(a, b, attr, formatFunc) {
+	return numDiff(a && a[attr], b && b[attr], formatFunc)
+}
+
+/**
+ * @param {number} val
+ * @param {number|undefined} [delta]
+ */
+function formatSimple(val, delta) {
+	return (
+		(delta === undefined
+			? ''
+			: `(<span class="${delta > 0 ? 'inc' : 'dec'}">${sign(delta)}${Math.abs(delta)}</span>) `) +
+		`${val}`
+	)
+}
+
+/**
+ * @param {number} val
+ * @param {number|undefined} [delta]
+ */
+function formatSize(val, delta) {
+	const valStr = (val / 1024 / 1024).toFixed(1)
+	const deltaStr = delta === undefined ? '' : (Math.abs(delta) / 1024 / 1024).toFixed(1)
+	return (
+		(delta === undefined
+			? ''
+			: `<span class="${delta > 0 ? 'inc' : 'dec'}">${sign(delta)}${deltaStr}</span> `) + valStr
+	)
 }
 
 /**
@@ -91,6 +139,15 @@ function getNodeByPath(pathOrStr) {
 
 /**
  * @param {HTMLTableRowElement} row
+ * @param {string} className
+ */
+function insertCell(row, className) {
+	const cell = row.insertCell()
+	cell.className = className
+	return cell
+}
+/**
+ * @param {HTMLTableRowElement} row
  * @param {DiffNode} node
  */
 function fillNodeRow(row, node) {
@@ -100,11 +157,13 @@ function fillNodeRow(row, node) {
 	if (node.wasCreated()) row.classList.add('created')
 	if (node.wasRemoved()) row.classList.add('removed')
 
-	const nameCell = row.insertCell()
+	const nameCell = insertCell(row, 'name')
 	nameCell.textContent = node.name()
-	nameCell.className = 'name'
 	nameCell.style.paddingLeft = node.level * 16 + 'px'
-	row.insertCell().innerHTML = numDiff(node.aggr0?.children, node.aggr1?.children)
+
+	insertCell(row, 'asize').innerHTML = numDiffAttr(node.aggr0, node.aggr1, 'asize', formatSize)
+	insertCell(row, 'dsize').innerHTML = numDiffAttr(node.aggr0, node.aggr1, 'dsize', formatSize)
+	insertCell(row, 'files').innerHTML = numDiffAttr(node.aggr0, node.aggr1, 'files')
 }
 
 /**
@@ -177,4 +236,5 @@ loadChildren(null, []).then(children => {
 	roots.length = 0
 	roots.push(...children)
 	refillDiffTable()
+	toggleRowCollapse($('#diffTable').tBodies[0].rows[0], roots[0])
 })

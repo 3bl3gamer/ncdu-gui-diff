@@ -29,17 +29,17 @@ func ReportNodeFromNcdu(entry NcduEntry, level int32) *ReportNode {
 		for i, ncduChild := range dir.Children() {
 			child := ReportNodeFromNcdu(ncduChild, level+1)
 			children[i] = child
+			aggr.Files += child.Aggr.Files + 1
 			if _, ok := ncduChild.(*NcduDirEntry); ok {
 				aggr.Dirs += 1
-			} else {
-				aggr.Files += 1
 			}
-			aggr.Files += child.Aggr.Files
 			aggr.Dirs += child.Aggr.Dirs
 			aggr.Asize += child.Aggr.Asize
 			aggr.Dsize += child.Aggr.Dsize
 		}
 	}
+	aggr.Asize += entry.File().Asize
+	aggr.Dsize += entry.File().Dsize
 	return &ReportNode{Entry: entry, Level: level, Aggr: aggr, Children: children}
 }
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -86,7 +85,7 @@ func showWebView() error {
 	w := webview.New(debug)
 	defer w.Destroy()
 	w.SetTitle("Minimal webview example")
-	w.SetSize(800, 600, webview.Hint(webview.HintNone))
+	w.SetSize(1280, 960, webview.Hint(webview.HintNone))
 	w.Navigate("file://" + exPath + "/www/index.html")
 	w.Bind("internal_getChildren", func(path []string) ([]DiffNodeCore, error) {
 		children := diff.Roots
@@ -107,8 +106,8 @@ func showWebView() error {
 		for i, c := range children {
 			coreChildren[i] = c.DiffNodeCore
 		}
-		b, e := json.Marshal(coreChildren)
-		fmt.Println(path, string(b), e)
+		// b, e := json.Marshal(coreChildren)
+		// fmt.Println(path, string(b), e)
 		return coreChildren, nil
 	})
 	w.Run()
