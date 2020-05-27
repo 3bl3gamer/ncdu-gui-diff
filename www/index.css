@@ -17,3 +17,10 @@ tr.collapsable .name::before {
 tr.collapsable.collapsed .name::before {
 	content: '>';
 }
+
+.inc {
+	color: green;
+}
+.dec {
+	color: green;
+}

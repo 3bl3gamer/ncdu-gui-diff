@@ -1,3 +1,3 @@
 interface Window {
-    internal_loadReportData: (fpath: string) => Promise<string>,
+    internal_getChildren: (path: string[]) => Promise<any[]>,
 }

@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/ansel1/merry"
 	"github.com/zserge/webview"
@@ -65,6 +68,25 @@ func showWebView() error {
 		return merry.Wrap(err)
 	}
 
+	// ====
+	stt := time.Now()
+	rep0, err := NcduPraseFile(reportFpaths[0])
+	if err != nil {
+		return merry.Wrap(err)
+	}
+	rep1, err := NcduPraseFile(reportFpaths[1])
+	if err != nil {
+		return merry.Wrap(err)
+	}
+	fmt.Println("parsing", time.Now().Sub(stt), rep0, rep1)
+	// var diff *DiffReport
+	res0 := ReportFromNcdu(reportFpaths[0], rep0)
+	res1 := ReportFromNcdu(reportFpaths[1], rep1)
+	fmt.Println("converting", time.Now().Sub(stt))
+	diff := CalcDiff(res0, res1)
+	fmt.Println("diffing", time.Now().Sub(stt))
+	// ====
+
 	htmlBuf, err := ioutil.ReadFile(exPath + "/www/index.html")
 	if err != nil {
 		return merry.Wrap(err)
@@ -88,13 +110,28 @@ func showWebView() error {
 	w.SetTitle("Minimal webview example")
 	w.SetSize(800, 600, webview.Hint(webview.HintNone))
 	w.Navigate("data:text/html," + html)
-	w.Bind("internal_loadReportData", func(fpath string) (string, error) {
-		fmt.Println("loading report " + fpath)
-		buf, err := ioutil.ReadFile(fpath)
-		if err != nil {
-			return "", merry.Wrap(err)
+	w.Bind("internal_getChildren", func(path []string) ([]DiffNodeCore, error) {
+		children := diff.Roots
+		for _, part := range path {
+			found := false
+			for _, child := range children {
+				if child.Name() == part {
+					children = child.Children
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, merry.New("no such file: " + part)
+			}
 		}
-		return string(buf), nil
+		coreChildren := make([]DiffNodeCore, len(children))
+		for i, c := range children {
+			coreChildren[i] = c.DiffNodeCore
+		}
+		b, e := json.Marshal(coreChildren)
+		fmt.Println(path, string(b), e)
+		return coreChildren, nil
 	})
 	w.Run()
 
@@ -102,7 +139,40 @@ func showWebView() error {
 }
 
 func main() {
+	go func() {
+		log.Println(http.ListenAndServe("localhost:6060", nil))
+	}()
 	if err := showWebView(); err != nil {
 		panic(merry.Details(err))
 	}
 }
+
+/*
+'progname',
+'progver',
+'timestamp',
+
+'name',
+'asize',
+'dsize',
+'dev',
+'ino',
+'notreg',
+'hlnkc',
+'read_error'
+
+https://dev.yorhel.nl/ncdu/jsonfmt
+
+const keys = new Set()
+const data = JSON.parse(fs.readFileSync('/home/zblzgamer/Documents/ncdu/report_2020-05-24_11-08__after_cleanup.json').toString('utf-8'))
+;(function iter(node) {
+	if (Array.isArray(node)) {
+		node.forEach(iter)
+	} else if (typeof node === 'object') {
+		for (const key in node)
+			keys.add(key)
+	} else {
+		console.log(node)
+	}
+})(data)
+*/

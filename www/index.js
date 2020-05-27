@@ -1,160 +1,92 @@
-/** @typedef {{name:string, asize:number, dsize?:number, ino:number}} ReportRawNode */
-/** @typedef {{fpath:string, root:ReportNode, nodeById:Map<number,ReportNode>}} Report */
-/** @typedef {{roots:DiffNode[], nodeById:Map<string,DiffNode>, report0:Report, report1:Report}} Diff */
-
-const $ = document.querySelector.bind(document)
-const reportFpaths = /** @type {string[]} */ (JSON.parse($('#dataBlock').textContent).reportFpaths)
+/** @typedef {{name:string}} NcduEntry */
+/** @typedef {{children:number}} Aggregation */
 
 /**
- * @class
- * @param {number} id
- * @param {string} name
- * @param {'file'|'dir'} type
- * @param {number} level
- * @param {ReportNode[]} children
+ * @param {number|null|undefined} a
+ * @param {number|null|undefined} b
  */
-function ReportNode(id, name, type, level, children) {
-	this.id = id
-	this.name = name
-	this.type = type
-	this.level = level
-	this.children = children
+function numDiff(a, b) {
+	if (a === null || a === undefined) return '' + b
+	if (b === null || b === undefined) return '' + a
+	if (a === b) return '' + a
+	return `${b} (<span class="${b > a ? 'inc' : 'dec'}">${b - a}</span>)`
+}
+
+/**
+ * @template T
+ * @param {T|null} val
+ * @returns {T}
+ */
+function mustBeNotNull(val) {
+	if (val === null) throw new Error('value is null, this should not happen')
+	return val
 }
 
 /**
  * @class
- * @param {ReportNode?} node0
- * @param {ReportNode?} node1
- * @param {DiffNode[]} children
+ * @param {DiffNode?} parent
+ * @param {{entry0:NcduEntry?, entry1:NcduEntry?, aggr0:Aggregation?, aggr1:Aggregation?, level:number}} data
  */
-function DiffNode(node0, node1, children) {
-	this.id = (node0 ? node0.id : '-') + '|' + (node1 ? node1.id : '-')
-	this.name = /** @type {ReportNode} */ (node0 || node1).name
-	this.type = /** @type {ReportNode} */ (node0 || node1).type
-	this.level = /** @type {ReportNode} */ (node0 || node1).level
-	this.node0 = node0
-	this.node1 = node1
-	this.children = children
+function DiffNode(parent, { entry0, entry1, aggr0, aggr1, level }) {
+	this.parent = parent
+	this.entry0 = entry0
+	this.entry1 = entry1
+	this.aggr0 = aggr0
+	this.aggr1 = aggr1
+	this.level = level
+	this.children = /** @type {DiffNode[]?} */ (null)
+}
+DiffNode.prototype.name = function () {
+	return /** @type {NcduEntry} */ (this.entry0 || this.entry1).name
+}
+DiffNode.prototype.isExpandable = function () {
+	return (this.aggr0 && this.aggr0.children > 0) || (this.aggr1 && this.aggr1.children > 0)
 }
 DiffNode.prototype.wasCreated = function () {
-	return this.node0 === null
+	return this.entry0 === null
 }
 DiffNode.prototype.wasRemoved = function () {
-	return this.node1 === null
+	return this.entry1 === null
 }
-
-/**
- * @param {ReportRawNode|ReportRawNode[]} data
- * @param {number} level
- * @param {{lastId:number}} state
- * @returns {ReportNode}
- */
-function convertNode(data, level, state) {
-	const nodeData = Array.isArray(data) ? data[0] : data
-	const childrenData = Array.isArray(data) ? data.slice(1) : []
-	return new ReportNode(
-		++state.lastId,
-		nodeData.name,
-		Array.isArray(data) ? 'dir' : 'file',
-		level,
-		childrenData.map(x => convertNode(x, level + 1, state)),
-	)
-}
-/**
- * @param {string} fpath
- * @param {string} dataStr
- * @returns {Report}
- */
-function convertReport(fpath, dataStr) {
-	const data = JSON.parse(dataStr)
-	const ncduInfo = data[2]
-	if (!('progver' in ncduInfo))
-		console.warn(`strange report ${fpath}: expected 3rd element to be object with 'progver' property`)
-	if (ncduInfo.progver !== '1.14.2') console.warn(`expected ncdu v1.14.2, got v${ncduInfo.progver}`)
-	const root = convertNode(data[3], 0, { lastId: 0 })
-	const nodeById = /** @type {Map<number,ReportNode>} */ (new Map())
-	;(function iter(/** @type {ReportNode} */ node) {
-		if (nodeById.has(node.id)) throw new Error(`id ${node.id} already exists`)
-		nodeById.set(node.id, node)
-		node.children.forEach(iter)
-	})(root)
-	return { fpath, root, nodeById }
-}
-
-const reportsMap = /** @type {Object<string,{data:Report?, promise:Promise<{}>}>} */ ({})
-function loadReportData(fpath) {
-	let report = reportsMap[fpath]
-	if (!report) {
-		const promise = window.internal_loadReportData(fpath).then(data => {
-			report.data = convertReport(fpath, data)
-			return report.data
-		})
-		report = reportsMap[fpath] = { data: null, promise }
-	}
-	return report.promise
-}
-/** @param {string} reportFpath */
-function getReportDataIfAny(reportFpath) {
-	const report = reportsMap[reportFpath]
-	return report ? report.data : null
-}
-
-/**
- * @param {ReportNode[]} nodes
- * @returns {Map<string,ReportNode>}
- */
-function makeNodeByNameMap(nodes) {
-	const map = new Map()
-	for (let i = 0; i < nodes.length; i++) map.set(nodes[i].name, nodes[i])
-	return map
-}
-/**
- * @param {ReportNode[]} nodes0
- * @param {ReportNode[]} nodes1
- * @returns {DiffNode[]}
- */
-function diffChildren(nodes0, nodes1) {
-	const res = /** @type {DiffNode[]} */ ([])
-	const node0ByName = makeNodeByNameMap(nodes0)
-	const node1ByName = makeNodeByNameMap(nodes1)
-	for (let i = 0; i < nodes0.length; i++) {
-		const node0 = nodes0[i]
-		const node1 = node1ByName.get(node0.name) || null
-		if (node1) node1ByName.delete(node0.name)
-		const children = diffChildren(node0.children, node1 ? node1.children : [])
-		res.push(new DiffNode(node0, node1, children))
-	}
-	for (const node1 of node1ByName.values()) {
-		res.push(new DiffNode(null, node1, diffChildren([], node1.children)))
+DiffNode.prototype.path = function () {
+	const res = /** @type {string[]} */ (Array(this.level + 1))
+	let node = /** @type {DiffNode?} */ (this)
+	while (node !== null) {
+		res[node.level] = node.name()
+		node = node.parent
 	}
 	return res
 }
-/**
- * @param {Report} report0
- * @param {Report} report1
- * @returns {Diff}
- */
-function calcDiff(report0, report1) {
-	const roots = diffChildren([report0.root], [report1.root])
-	const nodeById = /** @type {Map<string,DiffNode>} */ (new Map())
-	function iter(/** @type {DiffNode} */ node) {
-		if (nodeById.has(node.id)) throw new Error(`id ${node.id} already exists`)
-		nodeById.set(node.id, node)
-		node.children.forEach(iter)
-	}
-	roots.forEach(iter)
-	return { roots, nodeById, report0, report1 }
+DiffNode.prototype.pathStr = function () {
+	return JSON.stringify(this.path())
+}
+DiffNode.prototype.loadChildren = function () {
+	if (this.children !== null) return Promise.resolve(this.children)
+	return loadChildren(this, this.path()).then(children => {
+		this.children = children
+		return children
+	})
 }
 
-// ===
-
-function fillReportsTable() {
-	const table = /** @type {HTMLTableElement} */ ($('#reportsTable'))
-	for (const rep of reportFpaths) {
-		const row = table.tBodies[0].insertRow()
-		row.insertCell().textContent = rep
-		row.insertCell().textContent = '-'
+const roots = /** @type {DiffNode[]} */ ([])
+/** @param {string|string[]} pathOrStr */
+function getNodeByPath(pathOrStr) {
+	const path = typeof pathOrStr === 'string' ? /** @type {string[]} */ (JSON.parse(pathOrStr)) : pathOrStr
+	let node = /** @type {DiffNode?} */ (null)
+	let children = /** @type {DiffNode[]?} */ (roots)
+	for (const part of path) {
+		let found = false
+		for (const child of mustBeNotNull(children)) {
+			if (child.name() === part) {
+				node = child
+				children = node.children
+				found = true
+				break
+			}
+		}
+		if (!found) throw new Error(`part '${part}' not found`)
 	}
+	return mustBeNotNull(node)
 }
 
 /**
@@ -162,18 +94,19 @@ function fillReportsTable() {
  * @param {DiffNode} node
  */
 function fillNodeRow(row, node) {
-	row.dataset.id = '' + node.id
+	row.dataset.path = node.pathStr()
 	row.className = 'node'
-	if (node.type === 'dir') row.classList.add('collapsable', 'collapsed')
+	if (node.isExpandable()) row.classList.add('collapsable', 'collapsed')
 	if (node.wasCreated()) row.classList.add('created')
 	if (node.wasRemoved()) row.classList.add('removed')
 
 	const nameCell = row.insertCell()
-	nameCell.textContent = node.name
+	nameCell.textContent = node.name()
 	nameCell.className = 'name'
 	nameCell.style.paddingLeft = node.level * 16 + 'px'
-	row.insertCell().textContent = '' + node.children.length
+	row.insertCell().innerHTML = numDiff(node.aggr0?.children, node.aggr1?.children)
 }
+
 /**
  * @param {HTMLTableRowElement} row
  * @param {DiffNode} node
@@ -184,47 +117,64 @@ function toggleRowCollapse(row, node) {
 	for (; rowIndex < tbody.rows.length; rowIndex++) if (tbody.rows[rowIndex] === row) break
 
 	if (row.classList.contains('collapsed')) {
-		for (let i = 0; i < node.children.length; i++) {
-			fillNodeRow(tbody.insertRow(rowIndex + i + 1), node.children[i])
-		}
+		node.loadChildren().then(children => {
+			for (let i = 0; i < children.length; i++) {
+				fillNodeRow(tbody.insertRow(rowIndex + i + 1), children[i])
+			}
+		})
 	} else {
-		for (let i = 0; i < node.children.length; i++) {
+		const children = mustBeNotNull(node.children)
+		for (let i = 0; i < children.length; i++) {
 			const r = tbody.rows[rowIndex + 1]
 			if (r.classList.contains('collapsable') && !r.classList.contains('collapsed'))
-				toggleRowCollapse(r, node.children[i])
+				toggleRowCollapse(r, children[i])
 			tbody.deleteRow(rowIndex + 1)
 		}
 	}
 	row.classList.toggle('collapsed')
 }
+
 function refillDiffTable() {
 	const table = /** @type {HTMLTableElement} */ ($('#diffTable'))
 	table.tBodies[0].innerHTML = ''
 
-	const report0 = getReportDataIfAny(reportFpaths[0])
-	const report1 = getReportDataIfAny(reportFpaths[reportFpaths.length - 1])
-	if (report0 === null || report1 === null) return
-
-	const diff = calcDiff(report0, report1)
-
-	for (const root of diff.roots) fillNodeRow(table.tBodies[0].insertRow(), root)
-	// toggleRowCollapse(table.tBodies[0].rows[0], diff.roots)
+	for (const root of roots) fillNodeRow(table.tBodies[0].insertRow(), root)
 
 	table.onclick = e => {
 		// console.log(e && e.target && e.target instanceof HTMLElement)
 		if (e && e.target && e.target instanceof HTMLElement) {
 			const row = /** @type {HTMLTableRowElement} */ (e.target.closest('tr'))
-			const node = diff.nodeById.get(row.dataset.id || '')
+			const node = getNodeByPath(row.dataset.path || '')
 			// console.log(node, node && node.type, e.target.classList.contains('name'))
-			if (node && node.type === 'dir' && e.target.classList.contains('name')) {
+			if (node && node.isExpandable() && e.target.classList.contains('name')) {
 				toggleRowCollapse(row, node)
 			}
 		}
 	}
 }
 
-fillReportsTable()
-refillDiffTable()
+// fillReportsTable()
+// refillDiffTable()
 
-loadReportData(reportFpaths[0]).then(refillDiffTable)
-loadReportData(reportFpaths[reportFpaths.length - 1]).then(refillDiffTable)
+// loadReportData(reportFpaths[0]).then(refillDiffTable)
+// loadReportData(reportFpaths[reportFpaths.length - 1]).then(refillDiffTable)
+
+const $ = document.querySelector.bind(document)
+// const reportFpaths = /** @type {string[]} */ (JSON.parse($('#dataBlock').textContent).reportFpaths)
+// console.log(reportFpaths)
+
+/**
+ * @param {DiffNode?} parentNode
+ * @param {string[]} path
+ */
+function loadChildren(parentNode, path) {
+	return window.internal_getChildren(path).then(children => {
+		return children.map(x => new DiffNode(parentNode, x))
+	})
+}
+
+loadChildren(null, []).then(children => {
+	roots.length = 0
+	roots.push(...children)
+	refillDiffTable()
+})
