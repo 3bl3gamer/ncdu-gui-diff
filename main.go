@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -63,10 +62,6 @@ func showWebView() error {
 		return merry.Wrap(err)
 	}
 	fmt.Println(reportFpaths)
-	reportFpathsBuf, err := json.Marshal(reportFpaths)
-	if err != nil {
-		return merry.Wrap(err)
-	}
 
 	// ====
 	stt := time.Now()
@@ -87,29 +82,12 @@ func showWebView() error {
 	fmt.Println("diffing", time.Now().Sub(stt))
 	// ====
 
-	htmlBuf, err := ioutil.ReadFile(exPath + "/www/index.html")
-	if err != nil {
-		return merry.Wrap(err)
-	}
-	cssBuf, err := ioutil.ReadFile(exPath + "/www/index.css")
-	if err != nil {
-		return merry.Wrap(err)
-	}
-	jsBuf, err := ioutil.ReadFile(exPath + "/www/index.js")
-	if err != nil {
-		return merry.Wrap(err)
-	}
-	html := string(htmlBuf)
-	html = strings.Replace(html, "/* CSS_CONTENT */", string(cssBuf), 1)
-	html = strings.Replace(html, "/* JS_CONTENT */", strings.ReplaceAll(string(jsBuf), "+", "%2B"), 1)
-	html = strings.Replace(html, "/* DATA_CONTENT */", `{"reportFpaths":`+string(reportFpathsBuf)+`}`, 1)
-
 	debug := true
 	w := webview.New(debug)
 	defer w.Destroy()
 	w.SetTitle("Minimal webview example")
 	w.SetSize(800, 600, webview.Hint(webview.HintNone))
-	w.Navigate("data:text/html," + html)
+	w.Navigate("file://" + exPath + "/www/index.html")
 	w.Bind("internal_getChildren", func(path []string) ([]DiffNodeCore, error) {
 		children := diff.Roots
 		for _, part := range path {
