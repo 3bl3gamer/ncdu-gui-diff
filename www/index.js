@@ -23,7 +23,7 @@ function mustBeNotNull(val) {
 /**
  * @param {number|null|undefined} a
  * @param {number|null|undefined} b
- * @param {((val:number, delta?:number) => string)|undefined} [formatFunc]
+ * @param {((val:number, delta?:number) => [string, string])|undefined} [formatFunc]
  */
 function numDiff(a, b, formatFunc) {
 	formatFunc = formatFunc || formatSimple
@@ -37,7 +37,7 @@ function numDiff(a, b, formatFunc) {
  * @param {{}?} a
  * @param {{}?} b
  * @param {string} attr
- * @param {((val:number, delta?:number) => string)|undefined} [formatFunc]
+ * @param {((val:number, delta?:number) => [string, string])|undefined} [formatFunc]
  */
 function numDiffAttr(a, b, attr, formatFunc) {
 	return numDiff(a && a[attr], b && b[attr], formatFunc)
@@ -46,28 +46,31 @@ function numDiffAttr(a, b, attr, formatFunc) {
 /**
  * @param {number} val
  * @param {number|undefined} [delta]
+ * @returns {[string, string]}
  */
 function formatSimple(val, delta) {
-	return (
-		(delta === undefined
+	return [
+		delta === undefined
 			? ''
-			: `(<span class="${delta > 0 ? 'inc' : 'dec'}">${sign(delta)}${Math.abs(delta)}</span>) `) +
-		`${val}`
-	)
+			: `<span class="${delta > 0 ? 'inc' : 'dec'}">${sign(delta)}${Math.abs(delta)}</span>`,
+		`${val}`,
+	]
 }
 
 /**
  * @param {number} val
  * @param {number|undefined} [delta]
+ * @returns {[string, string]}
  */
 function formatSize(val, delta) {
 	const valStr = (val / 1024 / 1024).toFixed(1)
 	const deltaStr = delta === undefined ? '' : (Math.abs(delta) / 1024 / 1024).toFixed(1)
-	return (
-		(delta === undefined
+	return [
+		delta === undefined
 			? ''
-			: `<span class="${delta > 0 ? 'inc' : 'dec'}">${sign(delta)}${deltaStr}</span> `) + valStr
-	)
+			: `<span class="${delta > 0 ? 'inc' : 'dec'}">${sign(delta)}${deltaStr}</span> `,
+		valStr,
+	]
 }
 
 /**
@@ -147,6 +150,17 @@ function insertCell(row, className) {
 	return cell
 }
 /**
+ * @param {string} tagName
+ * @param {string} className
+ * @param {HTMLElement} parent
+ */
+function appendElement(tagName, className, parent) {
+	const elem = document.createElement(tagName)
+	elem.className = className
+	parent.appendChild(elem)
+	return elem
+}
+/**
  * @param {HTMLTableRowElement} row
  * @param {DiffNode} node
  */
@@ -157,13 +171,17 @@ function fillNodeRow(row, node) {
 	if (node.wasCreated()) row.classList.add('created')
 	if (node.wasRemoved()) row.classList.add('removed')
 
-	const nameCell = insertCell(row, 'name')
-	nameCell.textContent = node.name()
-	nameCell.style.paddingLeft = node.level * 16 + 'px'
+	const c = className => insertCell(row, className)
+	const e = appendElement
+	const [aggr0, aggr1] = [node.aggr0, node.aggr1]
 
-	insertCell(row, 'asize').innerHTML = numDiffAttr(node.aggr0, node.aggr1, 'asize', formatSize)
-	insertCell(row, 'dsize').innerHTML = numDiffAttr(node.aggr0, node.aggr1, 'dsize', formatSize)
-	insertCell(row, 'files').innerHTML = numDiffAttr(node.aggr0, node.aggr1, 'files')
+	const nameCell = c('name')
+	const nameInner = e('span', 'inner', nameCell)
+	nameInner.textContent = node.name()
+	nameInner.style.marginLeft = node.level * 12 + 'px'
+	;[c('dsize diff').innerHTML, c('dsize val').innerHTML] = numDiffAttr(aggr0, aggr1, 'dsize', formatSize)
+	;[c('asize diff').innerHTML, c('asize val').innerHTML] = numDiffAttr(aggr0, aggr1, 'asize', formatSize)
+	;[c('files diff').innerHTML, c('files val').innerHTML] = numDiffAttr(aggr0, aggr1, 'files')
 }
 
 /**
@@ -205,7 +223,7 @@ function refillDiffTable() {
 			const row = /** @type {HTMLTableRowElement} */ (e.target.closest('tr'))
 			const node = getNodeByPath(row.dataset.path || '')
 			// console.log(node, node && node.type, e.target.classList.contains('name'))
-			if (node && node.isExpandable() && e.target.classList.contains('name')) {
+			if (node && node.isExpandable() && e.target.closest('.name')) {
 				toggleRowCollapse(row, node)
 			}
 		}

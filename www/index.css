@@ -14,25 +14,32 @@ tr {
 td {
 	padding: 2px 12px;
 }
+td.diff {
+	padding-right: 4px;
+}
+td.val {
+	padding-left: 4px;
+}
 
-tr.collapsable td.name {
+tr.collapsable td.name .inner {
 	position: relative;
 }
-tr.collapsable td.name::before {
-	content: 'v';
+tr.collapsable td.name .inner::before {
+	content: '▼';
 	position: absolute;
 	left: 0;
-	transform: translateX(-8px);
+	transform: translateX(-14px);
+	transition: transform 0.1s ease;
 }
-tr.collapsable.collapsed td.name::before {
-	content: '>';
+tr.collapsable.collapsed td.name .inner::before {
+	transform: translateX(-14px) rotate(-90deg);
 }
 
 tr.node.created {
 	background-color: rgb(195, 255, 195);
 }
 tr.node.removed {
-	background-color: rgb(255, 175, 175);
+	background-color: rgb(255, 185, 185);
 }
 
 td.asize,
