@@ -35,7 +35,7 @@ func showWebView(wwwPath string, diff *DiffReport) error {
 	debug := true
 	w := webview.New(debug)
 	defer w.Destroy()
-	w.SetTitle("Minimal webview example")
+	w.SetTitle("NCDU GUI diff")
 	w.SetSize(1280, 960, webview.Hint(webview.HintNone))
 	w.Navigate("file://" + wwwPath + "/index.html")
 	w.Bind("internal_getChildren", func(path []string) ([]DiffNodeCore, error) {

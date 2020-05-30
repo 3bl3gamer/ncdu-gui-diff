@@ -1,4 +1,4 @@
-module ncdu_ui_diff
+module ncdu_gui_diff
 
 go 1.14
 
