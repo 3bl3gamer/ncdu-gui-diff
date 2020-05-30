@@ -1,6 +1,10 @@
 package main
 
-import "github.com/ansel1/merry"
+import (
+	"strings"
+
+	"github.com/ansel1/merry"
+)
 
 func max(a, b int) int {
 	if a > b {
@@ -18,5 +22,16 @@ func (m *JsonRawSliceMessage) UnmarshalJSON(data []byte) error {
 		return merry.New("JsonRawSliceMessage: UnmarshalJSON on nil pointer")
 	}
 	*m = data
+	return nil
+}
+
+type StrSliceFlagValue []string
+
+func (s *StrSliceFlagValue) String() string {
+	return strings.Join(*s, ", ")
+}
+
+func (s *StrSliceFlagValue) Set(value string) error {
+	*s = append(*s, value)
 	return nil
 }

@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"io/ioutil"
-	_ "net/http/pprof"
+	"path/filepath"
 	"strconv"
 
 	"github.com/ansel1/merry"
 )
+
+// https://dev.yorhel.nl/ncdu/jsonfmt
 
 type NcduEntry interface {
 	File() *NcduFileEntry
@@ -59,16 +61,38 @@ type NcduReport struct {
 	Root     NcduEntry
 }
 
-func NcduParseGroup(buf []byte, curDev int64) (NcduEntry, error) {
+var errSkipEntry = merry.New("skip entry")
+
+type NcduConfig struct {
+	IgnorePaths []string
+}
+
+func (c NcduConfig) isIgnored(fpath string) bool {
+	for _, path := range c.IgnorePaths {
+		if path == fpath {
+			return true
+		}
+	}
+	return false
+}
+
+func ncduParseGroup(buf []byte, curDev int64, curPath string, config NcduConfig) (NcduEntry, error) {
 	if buf[0] == '[' {
 		var rawEntries []JsonRawSliceMessage
 		if err := json.Unmarshal(buf, &rawEntries); err != nil {
 			return nil, merry.Wrap(err)
 		}
-		dir := &NcduDirEntry{ChildrenInner: make([]NcduEntry, len(rawEntries)-1)}
+		dir := &NcduDirEntry{ChildrenInner: make([]NcduEntry, 0, len(rawEntries)-1)}
 		for i, raw := range rawEntries {
 			var ent NcduEntry
-			ent, err := NcduParseGroup(raw, curDev)
+			ent, err := ncduParseGroup(raw, curDev, curPath, config)
+			if merry.Is(err, errSkipEntry) {
+				if dir.FileInner == nil {
+					return nil, errSkipEntry
+				} else {
+					continue
+				}
+			}
 			if err != nil {
 				return nil, merry.Wrap(err)
 			}
@@ -76,11 +100,15 @@ func NcduParseGroup(buf []byte, curDev int64) (NcduEntry, error) {
 				if head, ok := ent.(*NcduFileEntry); ok {
 					dir.FileInner = head
 					curDev = head.Dev
+					curPath = filepath.Join(curPath, head.Name)
+					if config.isIgnored(curPath) {
+						return nil, errSkipEntry
+					}
 				} else {
 					return nil, merry.Errorf("expected file as directory head, got %T", head)
 				}
 			} else {
-				dir.ChildrenInner[i-1] = ent
+				dir.ChildrenInner = append(dir.ChildrenInner, ent)
 			}
 		}
 		return dir, nil
@@ -92,11 +120,14 @@ func NcduParseGroup(buf []byte, curDev int64) (NcduEntry, error) {
 		if file.Dev == 0 {
 			file.Dev = curDev //This field may be absent, in which case it is equivalent to that of the parent directory
 		}
+		if config.isIgnored(filepath.Join(curPath, file.Name)) {
+			return nil, errSkipEntry
+		}
 		return file, nil
 	}
 }
 
-func NcduPrase(buf []byte) (*NcduReport, error) {
+func NcduPrase(buf []byte, config NcduConfig) (*NcduReport, error) {
 	var data []JsonRawSliceMessage
 	if err := json.Unmarshal(buf, &data); err != nil {
 		return nil, merry.Wrap(err)
@@ -124,17 +155,17 @@ func NcduPrase(buf []byte) (*NcduReport, error) {
 	if err := json.Unmarshal(data[2], &meta); err != nil {
 		return nil, merry.Wrap(err)
 	}
-	root, err := NcduParseGroup(data[3], 0)
+	root, err := ncduParseGroup(data[3], 0, "", config)
 	if err != nil {
 		return nil, merry.Wrap(err)
 	}
 	return &NcduReport{Majorver: majorver, Minorver: minorver, Metadata: meta, Root: root}, nil
 }
 
-func NcduPraseFile(fpath string) (*NcduReport, error) {
+func NcduPraseFile(fpath string, config NcduConfig) (*NcduReport, error) {
 	buf, err := ioutil.ReadFile(fpath)
 	if err != nil {
 		return nil, merry.Wrap(err)
 	}
-	return NcduPrase(buf)
+	return NcduPrase(buf, config)
 }
