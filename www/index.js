@@ -1,5 +1,5 @@
 /** @typedef {{name:string}} NcduEntry */
-/** @typedef {{children:number}} Aggregation */
+/** @typedef {{children:number, files:number, disr:number, asize:number, dsize:number}} Aggregation */
 
 function toString(a) {
 	return '' + a
@@ -49,11 +49,13 @@ function numDiffAttr(a, b, attr, formatFunc) {
  * @returns {[string, string]}
  */
 function formatSimple(val, delta) {
+	const valStr = prettifyNumber(val, 0)
+	const deltaStr = delta === undefined ? '' : prettifyNumber(Math.abs(delta), 0)
 	return [
 		delta === undefined
 			? ''
-			: `<span class="${delta > 0 ? 'inc' : 'dec'}">${sign(delta)}${Math.abs(delta)}</span>`,
-		`${val}`,
+			: `<span class="${delta > 0 ? 'inc' : 'dec'}">${sign(delta)}${deltaStr}</span>`,
+		`${valStr}`,
 	]
 }
 
@@ -63,14 +65,26 @@ function formatSimple(val, delta) {
  * @returns {[string, string]}
  */
 function formatSize(val, delta) {
-	const valStr = (val / 1024 / 1024).toFixed(1)
-	const deltaStr = delta === undefined ? '' : (Math.abs(delta) / 1024 / 1024).toFixed(1)
+	const valStr = prettifyNumber(val / 1024 / 1024, 1)
+	const deltaStr = delta === undefined ? '' : prettifyNumber(Math.abs(delta / 1024 / 1024), 1)
 	return [
 		delta === undefined
 			? ''
 			: `<span class="${delta > 0 ? 'inc' : 'dec'}">${sign(delta)}${deltaStr}</span> `,
 		valStr,
 	]
+}
+
+/**
+ * @param {number} value
+ * @param {number} fractionDigits
+ */
+function prettifyNumber(value, fractionDigits) {
+	const fractLen = fractionDigits === 0 ? 0 : fractionDigits + 1 //+ dot
+	let valStr = value.toFixed(fractionDigits)
+	for (let i = valStr.length - fractLen - 3; i > 0; i -= 3)
+		valStr = valStr.substr(0, i) + '&thinsp;' + valStr.substr(i)
+	return fractLen > 0 ? valStr.slice(0, -2) + `<span class="dim">${valStr.slice(-2)}</span>` : valStr
 }
 
 /**
@@ -241,12 +255,29 @@ const $ = document.querySelector.bind(document)
 // console.log(reportFpaths)
 
 /**
+ * @param {DiffNode} a
+ * @param {DiffNode} b
+ */
+function sortByDSizeDelta(a, b) {
+	const aSize0 = a.aggr0 ? a.aggr0.dsize : 0
+	const aSize1 = a.aggr1 ? a.aggr1.dsize : 0
+	const aDelta = aSize1 - aSize0
+	const bSize0 = b.aggr0 ? b.aggr0.dsize : 0
+	const bSize1 = b.aggr1 ? b.aggr1.dsize : 0
+	const bDelta = bSize1 - bSize0
+	if (aDelta === 0 && bDelta === 0) return a.name().localeCompare(b.name())
+	if (aDelta === 0) return 1
+	if (bDelta === 0) return -1
+	return bDelta - aDelta
+}
+
+/**
  * @param {DiffNode?} parentNode
  * @param {string[]} path
  */
 function loadChildren(parentNode, path) {
 	return window.internal_getChildren(path).then(children => {
-		return children.map(x => new DiffNode(parentNode, x))
+		return children.map(x => new DiffNode(parentNode, x)).sort(sortByDSizeDelta)
 	})
 }
 

@@ -4,6 +4,9 @@
 .dec {
 	color: red;
 }
+.dim {
+	opacity: 0.55;
+}
 
 table {
 	border-collapse: collapse;
@@ -11,16 +14,22 @@ table {
 tr {
 	border-bottom: 1px solid lightgray;
 }
+tr:hover {
+	background-color: #EEE;
+}
 td {
 	padding: 2px 12px;
 }
 td.diff {
-	padding-right: 4px;
+	padding-right: 6px;
 }
 td.val {
-	padding-left: 4px;
+	padding-left: 6px;
 }
 
+tr.collapsable td.name:hover {
+	background-color: #DDD;
+}
 tr.collapsable td.name .inner {
 	position: relative;
 }
@@ -46,4 +55,5 @@ td.asize,
 td.dsize,
 td.files {
 	text-align: right;
+	white-space: nowrap;
 }
